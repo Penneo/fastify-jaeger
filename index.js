@@ -3,11 +3,12 @@
 const assert = require('assert')
 const fp = require('fastify-plugin')
 const { initTracer, opentracing, ZipkinB3TextMapCodec } = require('jaeger-client')
-const url = require('url')
+const { parse } = require('uri-js');
+const url = require('url');
 
 const { Tags, FORMAT_HTTP_HEADERS } = opentracing
 
-function jaegerPlugin (fastify, opts, next) {
+function jaegerPlugin(fastify, opts, next) {
   assert(opts.serviceName, 'Jaeger Plugin requires serviceName option')
   const { state = {}, initTracerOpts = {}, ...tracerConfig } = opts
   const exposeAPI = opts.exposeAPI !== false
@@ -30,17 +31,12 @@ function jaegerPlugin (fastify, opts, next) {
     { ...defaultOptions, ...initTracerOpts }
   )
 
-  let codec = new ZipkinB3TextMapCodec({ urlEncoding: true })
-
-  tracer.registerInjector(FORMAT_HTTP_HEADERS, codec)
-  tracer.registerExtractor(FORMAT_HTTP_HEADERS, codec)
-
   const tracerMap = new WeakMap()
 
-  function api () {
+  function api() {
     const req = this
     return {
-      get span () {
+      get span() {
         return tracerMap.get(req)
       },
       tags: Tags
@@ -48,25 +44,35 @@ function jaegerPlugin (fastify, opts, next) {
   }
 
   if (exposeAPI) {
-    fastify.decorateRequest('jaeger', api)
+    fastify.decorateRequest('jaeger', api);
   }
 
-  function filterObject (obj) {
+  if (!opts.disable) {
+    let codec = new ZipkinB3TextMapCodec({ urlEncoding: true })
+
+    tracer.registerInjector(FORMAT_HTTP_HEADERS, codec)
+    tracer.registerExtractor(FORMAT_HTTP_HEADERS, codec)
+  }
+
+  function filterObject(obj) {
     const ret = {}
     Object.keys(obj)
-      .filter((key) => obj[key] != null)
-      .forEach((key) => { ret[key] = obj[key] })
+    .filter((key) => obj[key] != null)
+    .forEach((key) => {
+      ret[key] = obj[key]
+    })
 
     return ret
   }
 
-  function setContext (headers) {
+  function setContext(headers) {
     return filterObject({ ...headers, ...state })
   }
 
-  function onRequest (req, res, done) {
+  function onRequest(req, res, done) {
     const parentSpanContext = tracer.extract(FORMAT_HTTP_HEADERS, setContext(req.raw.headers))
-    const span = tracer.startSpan(`${req.raw.method} - ${url.format(req.raw.url)}`, {
+    const parsedUri = parse(req.raw.url);
+    const span = tracer.startSpan(`${req.raw.method} ${parsedUri.path}`, {
       childOf: parentSpanContext,
       tags: {
         [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_SERVER,
@@ -79,14 +85,14 @@ function jaegerPlugin (fastify, opts, next) {
     done()
   }
 
-  function onResponse (req, reply, done) {
+  function onResponse(req, reply, done) {
     const span = tracerMap.get(req)
     span.setTag(Tags.HTTP_STATUS_CODE, reply.statusCode)
     span.finish()
     done()
   }
 
-  function onError (req, reply, error, done) {
+  function onError(req, reply, error, done) {
     const span = tracerMap.get(req)
     span.setTag(Tags.ERROR, {
       'error.object': error,
@@ -96,8 +102,13 @@ function jaegerPlugin (fastify, opts, next) {
     done()
   }
 
-  function onClose (instance, done) {
-    tracer.close(done)
+  function onClose(instance, done) {
+    // tracer.close function is missing from NoOp tracer used when tracing is disabled
+    if (tracer.close) {
+      tracer.close(done);
+    } else {
+      done();
+    }
   }
 
   fastify.addHook('onRequest', onRequest)
