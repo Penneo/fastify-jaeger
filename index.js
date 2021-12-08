@@ -2,32 +2,22 @@
 
 const assert = require('assert')
 const fp = require('fastify-plugin')
-const { initTracer, opentracing, ZipkinB3TextMapCodec } = require('jaeger-client')
+const { initTracerFromEnv, opentracing, ZipkinB3TextMapCodec } = require('jaeger-client')
 const { parse } = require('uri-js');
 const url = require('url');
 
 const { Tags, FORMAT_HTTP_HEADERS } = opentracing
 
 function jaegerPlugin(fastify, opts, next) {
-  assert(opts.serviceName, 'Jaeger Plugin requires serviceName option')
   const { state = {}, initTracerOpts = {}, ...tracerConfig } = opts
   const exposeAPI = opts.exposeAPI !== false
-  const defaultConfig = {
-    sampler: {
-      type: 'const',
-      param: 1
-    },
-    reporter: {
-      logSpans: false
-    }
-  }
 
   const defaultOptions = {
     logger: fastify.log
   }
 
-  const tracer = initTracer(
-    { ...defaultConfig, ...tracerConfig },
+  const tracer = initTracerFromEnv(
+    { ...tracerConfig },
     { ...defaultOptions, ...initTracerOpts }
   )
 
@@ -47,7 +37,7 @@ function jaegerPlugin(fastify, opts, next) {
     fastify.decorateRequest('jaeger', api);
   }
 
-  if (!opts.disable) {
+  if (!('JAEGER_DISABLED' in process.env) || ('JAEGER_DISABLED' in process.env && !process.env.JAEGER_DISABLED)) {
     let codec = new ZipkinB3TextMapCodec({ urlEncoding: true })
 
     tracer.registerInjector(FORMAT_HTTP_HEADERS, codec)
