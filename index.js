@@ -9,7 +9,7 @@ const url = require('url');
 const { Tags, FORMAT_HTTP_HEADERS } = opentracing
 
 function jaegerPlugin(fastify, opts, next) {
-  const { state = {}, initTracerOpts = {}, useEnvVarsAsConfig = true, ...tracerConfig } = opts
+  const { state = {}, initTracerOpts = {}, useEnvVarsAsConfig = false, ...tracerConfig } = opts
   const exposeAPI = opts.exposeAPI !== false
 
   const defaultOptions = {
