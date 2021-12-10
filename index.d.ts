@@ -9,6 +9,7 @@ interface PluginOptions {
     exposeAPI?: boolean,
     state?: never,
     initTracerOpts?: never,
+    useEnvVarsAsConfig?: boolean,
 
     [key: string]: unknown;
 }

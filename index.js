@@ -2,24 +2,43 @@
 
 const assert = require('assert')
 const fp = require('fastify-plugin')
-const { initTracerFromEnv, opentracing, ZipkinB3TextMapCodec } = require('jaeger-client')
+const { initTracer, initTracerFromEnv, opentracing, ZipkinB3TextMapCodec } = require('jaeger-client')
 const { parse } = require('uri-js');
 const url = require('url');
 
 const { Tags, FORMAT_HTTP_HEADERS } = opentracing
 
 function jaegerPlugin(fastify, opts, next) {
-  const { state = {}, initTracerOpts = {}, ...tracerConfig } = opts
+  const { state = {}, initTracerOpts = {}, useEnvVarsAsConfig = true, ...tracerConfig } = opts
   const exposeAPI = opts.exposeAPI !== false
 
   const defaultOptions = {
     logger: fastify.log
   }
 
-  const tracer = initTracerFromEnv(
-    { ...tracerConfig },
-    { ...defaultOptions, ...initTracerOpts }
-  )
+  let tracer
+
+  if (useEnvVarsAsConfig) {
+    tracer = initTracerFromEnv(
+      { ...tracerConfig },
+      { ...defaultOptions, ...initTracerOpts }
+    )
+  } else {
+    const defaultConfig = {
+      sampler: {
+        type: 'const',
+        param: 1
+      },
+      reporter: {
+        logSpans: false
+      }
+    }
+
+    tracer = initTracer(
+      { ...defaultConfig, ...tracerConfig },
+      { ...defaultOptions, ...initTracerOpts }
+    )
+  }
 
   const tracerMap = new WeakMap()
 
@@ -37,7 +56,9 @@ function jaegerPlugin(fastify, opts, next) {
     fastify.decorateRequest('jaeger', api);
   }
 
-  if (!('JAEGER_DISABLED' in process.env) || ('JAEGER_DISABLED' in process.env && !process.env.JAEGER_DISABLED)) {
+  const jaegerDisabled = 'disable' in tracerConfig ? tracerConfig.disable : getBooleanEnv('JAEGER_DISABLED', true);
+
+  if (!jaegerDisabled) {
     let codec = new ZipkinB3TextMapCodec({ urlEncoding: true })
 
     tracer.registerInjector(FORMAT_HTTP_HEADERS, codec)
@@ -107,6 +128,11 @@ function jaegerPlugin(fastify, opts, next) {
   fastify.addHook('onClose', onClose)
 
   next()
+}
+
+const getBooleanEnv = (varName, _default = false) => {
+  const value = process.env[varName]
+  return value?.toString().toLowerCase() === 'true' ?? _default
 }
 
 module.exports = fp(jaegerPlugin, { name: 'fastify-jaeger' })
