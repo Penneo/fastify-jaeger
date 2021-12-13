@@ -128,9 +128,4 @@ function jaegerPlugin(fastify, opts, next) {
   next()
 }
 
-const getBooleanEnv = (varName, _default = false) => {
-  const value = process.env[varName]
-  return value?.toString().toLowerCase() === 'true' ?? _default
-}
-
 module.exports = fp(jaegerPlugin, { name: 'fastify-jaeger' })
