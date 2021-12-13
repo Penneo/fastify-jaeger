@@ -58,7 +58,7 @@ function jaegerPlugin(fastify, opts, next) {
 
   const jaegerDisabled = 'disable' in tracerConfig ? tracerConfig.disable : getBooleanEnv('JAEGER_DISABLED', true);
 
-  if (!jaegerDisabled) {
+  if (!jaegerDisabled && tracer.registerInjector && tracer.registerExtractor) {
     let codec = new ZipkinB3TextMapCodec({ urlEncoding: true })
 
     tracer.registerInjector(FORMAT_HTTP_HEADERS, codec)
