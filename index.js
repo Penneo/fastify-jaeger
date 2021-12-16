@@ -79,10 +79,10 @@ function jaegerPlugin(fastify, opts, next) {
   }
 
   function onRequest(req, res, done) {
-    const parentSpanContext = tracer.extract(FORMAT_HTTP_HEADERS, setContext(req.raw.headers))
+    // const parentSpanContext = tracer.extract(FORMAT_HTTP_HEADERS, setContext(req.raw.headers))
     const parsedUri = parse(req.raw.url);
     const span = tracer.startSpan(`${req.raw.method} ${parsedUri.path}`, {
-      childOf: parentSpanContext,
+      // childOf: parentSpanContext,
       tags: {
         [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_SERVER,
         [Tags.HTTP_METHOD]: req.raw.method,
